@@ -2,7 +2,7 @@
 import torch
 
 import numpy as np
-from config import config
+from rcnn_emd_refine.config import config
 from det_oprs.bbox_opr import box_overlap_opr, bbox_transform_opr, box_overlap_ignore_opr
 
 @torch.no_grad()

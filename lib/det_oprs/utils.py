@@ -1,7 +1,7 @@
 from collections import OrderedDict
 import pickle
 
-import torch
+import paddle as torch
 
 def get_padded_tensor(tensor, multiple_number, pad_value=0):
     t_height, t_width = tensor.shape[-2], tensor.shape[-1]
@@ -12,11 +12,11 @@ def get_padded_tensor(tensor, multiple_number, pad_value=0):
     ndim = tensor.ndim
     if ndim == 4:
         padded_tensor = torch.ones([tensor.shape[0], tensor.shape[1], padded_height, padded_width]) * pad_value
-        padded_tensor = padded_tensor.type_as(tensor)
+        padded_tensor = torch.cast(padded_tensor,'float32')
         padded_tensor[:, :, :t_height, :t_width] = tensor
     elif ndim == 3:
         padded_tensor = torch.ones([tensor.shape[0], padded_height, padded_width]) * pad_value
-        padded_tensor = padded_tensor.type_as(tensor)
+        padded_tensor = torch.cast(padded_tensor,'float32')
         padded_tensor[:, :t_height, :t_width] = tensor
     else:
         raise Exception('Not supported tensor dim: {}'.format(ndim))
@@ -69,7 +69,7 @@ def _rename_weights_for_resnet50(weights):
             continue
         if "fc1000" in k:
             continue
-        w = torch.from_numpy(v)
+        w = torch.to_tensor(v)
         new_weights[key_map[k]] = w
     return new_weights
 

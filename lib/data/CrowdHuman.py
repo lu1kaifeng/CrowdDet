@@ -1,11 +1,12 @@
 import os
 import cv2
-import torch
+import paddle as torch
 import numpy as np
+from paddle.fluid.dataloader import Dataset
 
 from utils import misc_utils
 
-class CrowdHuman(torch.utils.data.Dataset):
+class CrowdHuman(Dataset):
     def __init__(self, config, if_train):
         if if_train:
             self.training = True
@@ -32,7 +33,7 @@ class CrowdHuman(torch.utils.data.Dataset):
         else:
             if_flap = False
         # image
-        image_path = os.path.join(self.config.image_folder, record['ID']+'.png')
+        image_path = os.path.join(self.config.image_folder, record['ID']+'.jpg')
         image = misc_utils.load_img(image_path)
         image_h = image.shape[0]
         image_w = image.shape[1]
@@ -57,13 +58,13 @@ class CrowdHuman(torch.utils.data.Dataset):
             # INTER_CUBIC, INTER_LINEAR, INTER_NEAREST, INTER_AREA, INTER_LANCZOS4
             resized_image = cv2.resize(image, (t_width, t_height), interpolation=cv2.INTER_LINEAR)
             resized_image = resized_image.transpose(2, 0, 1)
-            image = torch.tensor(resized_image).float()
+            image = torch.to_tensor(resized_image).float()
             gtboxes = misc_utils.load_gt(record, 'gtboxes', 'fbox', self.config.class_names)
             gtboxes[:, 2:4] += gtboxes[:, :2]
-            gtboxes = torch.tensor(gtboxes)
+            gtboxes = torch.to_tensor(gtboxes)
             # im_info
             nr_gtboxes = gtboxes.shape[0]
-            im_info = torch.tensor([t_height, t_width, scale, image_h, image_w, nr_gtboxes])
+            im_info = torch.to_tensor([t_height, t_width, scale, image_h, image_w, nr_gtboxes])
             return image, gtboxes, im_info, record['ID']
 
     def merge_batch(self, data):
@@ -81,7 +82,7 @@ class CrowdHuman(torch.utils.data.Dataset):
         resized_images = np.array([cv2.resize(
                 im, (t_width, t_height), interpolation=cv2.INTER_LINEAR) for im in padded_images])
         resized_images = resized_images.transpose(0, 3, 1, 2)
-        images = torch.tensor(resized_images).float()
+        images = torch.cast(torch.to_tensor(resized_images),'float32')
         # ground_truth
         ground_truth = []
         for it in gt_boxes:
@@ -90,13 +91,13 @@ class CrowdHuman(torch.utils.data.Dataset):
             max_box = min(self.config.max_boxes_of_image, len(it))
             gt_padded[:max_box] = it[:max_box]
             ground_truth.append(gt_padded)
-        ground_truth = torch.tensor(ground_truth).float()
+        ground_truth =  torch.cast(torch.to_tensor(ground_truth),'float32')
         # im_info
         im_info[:, 0] = t_height
         im_info[:, 1] = t_width
         im_info[:, 2] = scale
-        im_info = torch.tensor(im_info)
-        if max(im_info[:, -1] < 2):
+        im_info = torch.to_tensor(im_info)
+        if max(torch.cast(im_info[:, -1] < 2,'float32')):#max(im_info[:, -1] < 2):
             return None, None, None
         else:
             return images, ground_truth, im_info

@@ -14,16 +14,16 @@ add_path(os.path.join(root_dir, 'lib'))
 class Crowd_human:
     class_names = ['background', 'person']
     num_classes = len(class_names)
-    root_folder = '/data/CrowdHuman'
-    image_folder = '/data/CrowdHuman/images'
-    train_source = os.path.join('/data/CrowdHuman/annotation_train.odgt')
-    eval_source = os.path.join('/data/CrowdHuman/annotation_val.odgt')
+    root_folder = 'data/CrowdHuman'
+    image_folder = 'data/CrowdHuman/Images'
+    train_source = os.path.join('data/CrowdHuman/annotation_train.odgt')
+    eval_source = os.path.join('data/CrowdHuman/annotation_val.odgt')
 
 class Config:
     output_dir = 'outputs'
     model_dir = os.path.join(output_dir, 'model_dump')
     eval_dir = os.path.join(output_dir, 'eval_dump')
-    init_weights = '/data/model/resnet50_fbaug.pth'
+    init_weights = None#'/data/model/resnet50_fbaug.pth'
 
     # ----------data config---------- #
     image_mean = np.array([103.530, 116.280, 123.675])
@@ -46,7 +46,7 @@ class Config:
     backbone_freeze_at = 2
     rpn_channel = 256
     
-    train_batch_per_gpu = 2
+    train_batch_per_gpu = 1
     momentum = 0.9
     weight_decay = 1e-4
     base_lr = 1e-3 * 1.25

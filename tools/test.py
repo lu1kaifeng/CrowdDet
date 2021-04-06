@@ -147,8 +147,8 @@ def run_test():
     # import libs
     model_root_dir = os.path.join('../model/', args.model_dir)
     sys.path.insert(0, model_root_dir)
-    from config import config
-    from network import Network
+    from rcnn_emd_refine.config import config
+    from rcnn_emd_refine.network import Network
     eval_all(args, config, Network)
 
 if __name__ == '__main__':

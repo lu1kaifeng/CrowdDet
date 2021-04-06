@@ -1,5 +1,6 @@
 import numpy as np
-import torch
+import paddle as torch
+from paddle.fluid.layers import concat as cat
 import torch.nn.functional as F
 
 class AnchorGenerator():
@@ -46,14 +47,13 @@ class AnchorGenerator():
 
     def get_center_offsets(self, fm_map, stride):
         fm_height, fm_width = fm_map.shape[-2], fm_map.shape[-1]
-        f_device = fm_map.device
-        shift_x = torch.arange(0, fm_width, device=f_device) * stride
-        shift_y = torch.arange(0, fm_height, device=f_device) * stride
-        broad_shift_x = shift_x.reshape(-1, shift_x.shape[0]).repeat(fm_height,1)
-        broad_shift_y = shift_y.reshape(shift_y.shape[0], -1).repeat(1,fm_width)
-        flatten_shift_x = broad_shift_x.flatten().reshape(-1,1)
-        flatten_shift_y = broad_shift_y.flatten().reshape(-1,1)
-        shifts = torch.cat(
+        shift_x = torch.arange(0, fm_width) * stride
+        shift_y = torch.arange(0, fm_height) * stride
+        broad_shift_x = shift_x.reshape((-1, shift_x.shape[0])).tile((fm_height,1))
+        broad_shift_y = shift_y.reshape((shift_y.shape[0], -1)).tile((1,fm_width))
+        flatten_shift_x = broad_shift_x.flatten().reshape((-1,1))
+        flatten_shift_y = broad_shift_y.flatten().reshape((-1,1))
+        shifts = cat(
             [flatten_shift_x, flatten_shift_y, flatten_shift_x, flatten_shift_y],
             axis=1)
         return shifts 
@@ -63,13 +63,13 @@ class AnchorGenerator():
         shifts = self.get_center_offsets(fm_map, base_stride * off_stride)
         # plane_anchors shape: [B, 4], e.g. B=3
         plane_anchors = self.get_plane_anchors(self.base_scale * off_stride)
-        plane_anchors = torch.tensor(plane_anchors, device=fm_map.device)
+        plane_anchors = torch.to_tensor(plane_anchors)
         # all_anchors shape: [A, B, 4]
-        all_anchors = plane_anchors[None, :] + shifts[:, None]
-        all_anchors = all_anchors.reshape(-1, 4)
+        all_anchors = plane_anchors.unsqueeze(0) + shifts.unsqueeze(1)
+        all_anchors = all_anchors.reshape((-1, 4))
         return all_anchors
 
-    @torch.no_grad()
+    #@torch.no_grad()
     def __call__(self, featmap, base_stride, off_stride):
         return self.get_anchors_by_feature(featmap, base_stride, off_stride)
 

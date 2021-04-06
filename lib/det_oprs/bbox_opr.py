@@ -1,11 +1,15 @@
 import math
-import torch
+import torch as penis
+import paddle as torch
+from paddle.fluid.layers import clip as clamp
+from paddle.fluid.layers import concat as cat
 
 def filter_boxes_opr(boxes, min_size):
     """Remove all boxes with any side smaller than min_size."""
     ws = boxes[:, 2] - boxes[:, 0] + 1
     hs = boxes[:, 3] - boxes[:, 1] + 1
-    keep = (ws >= min_size) * (hs >= min_size)
+    keep = (ws >= min_size).cast('float32') * (hs >= min_size).cast('float32')
+    keep = keep.cast('bool')
     return keep
 
 def clip_boxes_opr(boxes, im_info):
@@ -40,8 +44,8 @@ def bbox_transform_inv_opr(bbox, deltas):
 
     dw = deltas[:, 2]
     dh = deltas[:, 3]
-    dw = torch.clamp(dw, max=max_delta)
-    dh = torch.clamp(dh, max=max_delta)
+    dw = clamp(dw, max=max_delta,min=float('-inf'))
+    dh = clamp(dh, max=max_delta,min=float('-inf'))
     pred_width = bbox_width * torch.exp(dw)
     pred_height = bbox_height * torch.exp(dh)
 
@@ -49,8 +53,8 @@ def bbox_transform_inv_opr(bbox, deltas):
     pred_y1 = pred_ctr_y - 0.5 * pred_height
     pred_x2 = pred_ctr_x + 0.5 * pred_width
     pred_y2 = pred_ctr_y + 0.5 * pred_height
-    pred_boxes = torch.cat((pred_x1.reshape(-1, 1), pred_y1.reshape(-1, 1),
-                            pred_x2.reshape(-1, 1), pred_y2.reshape(-1, 1)), dim=1)
+    pred_boxes = cat((pred_x1.reshape((-1, 1)), pred_y1.reshape((-1, 1)),
+                            pred_x2.reshape((-1, 1)), pred_y2.reshape((-1, 1))), axis=1)
     return pred_boxes
 
 def bbox_transform_opr(bbox, gt):
@@ -70,8 +74,8 @@ def bbox_transform_opr(bbox, gt):
     target_dy = (gt_ctr_y - bbox_ctr_y) / bbox_height
     target_dw = torch.log(gt_width / bbox_width)
     target_dh = torch.log(gt_height / bbox_height)
-    target = torch.cat((target_dx.reshape(-1, 1), target_dy.reshape(-1, 1),
-                        target_dw.reshape(-1, 1), target_dh.reshape(-1, 1)), dim=1)
+    target = cat((target_dx.reshape(-1, 1), target_dy.reshape(-1, 1),
+                        target_dw.reshape(-1, 1), target_dh.reshape(-1, 1)), axis=1)
     return target
 
 def box_overlap_opr(box, gt):
@@ -88,7 +92,7 @@ def box_overlap_opr(box, gt):
     iou = torch.where(
         inter > 0,
         inter / (area_box[:, None] + area_gt - inter),
-        torch.zeros(1, dtype=inter.dtype, device=inter.device),
+        torch.zeros((1), dtype=inter.dtype),
     )
     return iou
 
@@ -107,11 +111,11 @@ def box_overlap_ignore_opr(box, gt, ignore_label=-1):
     iou = torch.where(
         inter > 0,
         inter / (area_box[:, None] + area_gt - inter),
-        torch.zeros(1, dtype=inter.dtype, device=inter.device))
+        torch.zeros((1), dtype=inter.dtype))
     ioa = torch.where(
         inter > 0,
         inter / (area_box[:, None]),
-        torch.zeros(1, dtype=inter.dtype, device=inter.device))
+        torch.zeros((1), dtype=inter.dtype))
     gt_ignore_mask = gt[:, 4].eq(ignore_label).repeat(box.shape[0], 1)
     iou *= ~gt_ignore_mask
     ioa *= gt_ignore_mask

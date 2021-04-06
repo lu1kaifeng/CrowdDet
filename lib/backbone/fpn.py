@@ -1,10 +1,13 @@
 import math
 
-import torch
-from torch import nn
-import torch.nn.functional as F
+import paddle as torch
+from paddle import nn
+import paddle.nn.functional as F
 
-class FPN(nn.Module):
+from backbone.ModuleList import ModuleList
+
+
+class FPN(nn.Layer):
     """
     This module implements Feature Pyramid Network.
     It creates pyramid features built on top of some input feature maps.
@@ -17,15 +20,15 @@ class FPN(nn.Module):
         fpn_dim = 256
         in_channels = in_channels[layers_begin-2:]
 
-        lateral_convs = nn.ModuleList()
-        output_convs = nn.ModuleList()
+        lateral_convs = ModuleList()
+        output_convs = ModuleList()
         for idx, in_channels in enumerate(in_channels):
-            lateral_conv = nn.Conv2d(in_channels, fpn_dim, kernel_size=1)
-            output_conv = nn.Conv2d(fpn_dim, fpn_dim, kernel_size=3, stride=1, padding=1)
-            nn.init.kaiming_normal_(lateral_conv.weight, mode='fan_out')
-            nn.init.constant_(lateral_conv.bias, 0)
-            nn.init.kaiming_normal_(output_conv.weight, mode='fan_out')
-            nn.init.constant_(output_conv.bias, 0)
+            lateral_conv = nn.Conv2D(in_channels, fpn_dim, kernel_size=1)
+            output_conv = nn.Conv2D(fpn_dim, fpn_dim, kernel_size=3, stride=1, padding=1)
+            # nn.init.kaiming_normal_(lateral_conv.weight, mode='fan_out')
+            # nn.init.constant_(lateral_conv.bias, 0)
+            # nn.init.kaiming_normal_(output_conv.weight, mode='fan_out')
+            # nn.init.constant_(output_conv.bias, 0)
             lateral_convs.append(lateral_conv)
             output_convs.append(output_conv)
 
@@ -35,11 +38,11 @@ class FPN(nn.Module):
         self.output_b = layers_begin
         self.output_e = layers_end
         if self.output_e == 7:
-            self.p6 = nn.Conv2d(fpn_dim, fpn_dim, kernel_size=3, stride=2, padding=1)
-            self.p7 = nn.Conv2d(fpn_dim, fpn_dim, kernel_size=3, stride=2, padding=1)
-            for l in [self.p6, self.p7]:
-                nn.init.kaiming_uniform_(l.weight, a=1)  # pyre-ignore
-                nn.init.constant_(l.bias, 0)
+            self.p6 = nn.Conv2D(fpn_dim, fpn_dim, kernel_size=3, stride=2, padding=1)
+            self.p7 = nn.Conv2D(fpn_dim, fpn_dim, kernel_size=3, stride=2, padding=1)
+            # for l in [self.p6, self.p7]:
+            #     nn.init.kaiming_uniform_(l.weight, a=1)  # pyre-ignore
+            #     nn.init.constant_(l.bias, 0)
 
     def forward(self, x):
         bottom_up_features = self.bottom_up(x)

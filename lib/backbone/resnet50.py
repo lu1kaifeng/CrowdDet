@@ -1,30 +1,30 @@
 import torch
-from torch import nn
-import torch.nn.functional as F
+from paddle import nn
+import paddle.nn.functional as F
 
 from layers.batch_norm import FrozenBatchNorm2d
 
-class Bottleneck(nn.Module):
+class Bottleneck(nn.Layer):
     def __init__(self, in_cha, neck_cha, out_cha, stride, has_bias=False):
         super(Bottleneck, self).__init__()
 
         self.downsample = None
         if in_cha!= out_cha or stride != 1:
             self.downsample = nn.Sequential(
-                nn.Conv2d(in_cha, out_cha, kernel_size=1, stride=stride, bias=has_bias),
+                nn.Conv2D(in_cha, out_cha, kernel_size=1, stride=stride, bias_attr=has_bias),
                 FrozenBatchNorm2d(out_cha),
             )
 
         # The original MSRA ResNet models have stride in the first 1x1 conv
         # The subsequent fb.torch.resnet and Caffe2 ResNe[X]t implementations
         # have stride in the 3x3 conv
-        self.conv1 = nn.Conv2d(in_cha, neck_cha, kernel_size=1, stride=1, bias=has_bias)
+        self.conv1 = nn.Conv2D(in_cha, neck_cha, kernel_size=1, stride=1, bias_attr=has_bias)
         self.bn1 = FrozenBatchNorm2d(neck_cha)
 
-        self.conv2 = nn.Conv2d(neck_cha, neck_cha, kernel_size=3, stride=stride, padding=1, bias=has_bias)
+        self.conv2 = nn.Conv2D(neck_cha, neck_cha, kernel_size=3, stride=stride, padding=1, bias_attr=has_bias)
         self.bn2 = FrozenBatchNorm2d(neck_cha)
 
-        self.conv3 = nn.Conv2d(neck_cha, out_cha, kernel_size=1, bias=has_bias)
+        self.conv3 = nn.Conv2D(neck_cha, out_cha, kernel_size=1, bias_attr=has_bias)
         self.bn3 = FrozenBatchNorm2d(out_cha)
 
     def forward(self, x):
@@ -46,11 +46,11 @@ class Bottleneck(nn.Module):
         return x
 
 
-class ResNet50(nn.Module):
+class ResNet50(nn.Layer):
     def __init__(self, freeze_at, has_bias=False):
         super(ResNet50, self).__init__()
         self.has_bias = has_bias
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=has_bias)
+        self.conv1 = nn.Conv2D(3, 64, kernel_size=7, stride=2, padding=3, bias_attr=has_bias)
         self.bn1 = FrozenBatchNorm2d(64)
 
         block_counts = [3, 4, 6, 3]
@@ -68,11 +68,11 @@ class ResNet50(nn.Module):
         self.layer4 = self._make_layer(block_counts[3], out_channels_list[2],
             bottleneck_channels_list[3], out_channels_list[3], stride_list[3])
 
-        for l in self.modules():
-            if isinstance(l, nn.Conv2d):
-                nn.init.kaiming_normal_(l.weight, mode='fan_out')
-                if self.has_bias:
-                    nn.init.constant_(l.bias, 0)
+        # for l in self.modules():
+        #     if isinstance(l, nn.Conv2D):
+        #         nn.init.kaiming_normal_(l.weight, mode='fan_out')
+        #         if self.has_bias:
+        #             nn.init.constant_(l.bias, 0)
 
         self._freeze_backbone(freeze_at)
 

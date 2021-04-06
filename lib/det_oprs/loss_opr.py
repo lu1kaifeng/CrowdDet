@@ -1,6 +1,6 @@
 import torch
 
-from config import config
+from rcnn_emd_refine.config import config
 
 def softmax_loss(score, label, ignore_label=-1):
     with torch.no_grad():

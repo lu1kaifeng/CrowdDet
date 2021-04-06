@@ -1,10 +1,10 @@
-import torch
-import torch.nn.functional as F
-
-from config import config
+import paddle as torch
+from paddle.fluid.layers import concat as cat, matrix_nms as nms
+from rcnn_emd_refine.config import config
 from det_oprs.bbox_opr import bbox_transform_inv_opr, clip_boxes_opr, \
     filter_boxes_opr
-from torchvision.ops import nms
+from paddle import fluid
+import paddle.nn.functional as F
 
 @torch.no_grad()
 def find_top_rpn_proposals(is_train, rpn_bbox_offsets_list, rpn_cls_prob_list,
@@ -29,10 +29,10 @@ def find_top_rpn_proposals(is_train, rpn_bbox_offsets_list, rpn_cls_prob_list,
         for l in range(list_size):
             # get proposals and probs
             offsets = rpn_bbox_offsets_list[l][bid] \
-                .permute(1, 2, 0).reshape(-1, 4)
+                .transpose((1, 2, 0)).reshape((-1, 4))
             if bbox_normalize_targets:
-                std_opr = torch.tensor(config.bbox_normalize_stds[None, :]).type_as(bbox_targets)
-                mean_opr = torch.tensor(config.bbox_normalize_means[None, :]).type_as(bbox_targets)
+                std_opr = torch.to_tensor(config.bbox_normalize_stds[None, :]).cast('float32')
+                mean_opr = torch.to_tensor(config.bbox_normalize_means[None, :]).cast('float32')
                 pred_offsets = pred_offsets * std_opr
                 pred_offsets = pred_offsets + mean_opr
             all_anchors = all_anchors_list[l]
@@ -40,24 +40,26 @@ def find_top_rpn_proposals(is_train, rpn_bbox_offsets_list, rpn_cls_prob_list,
             if config.anchor_within_border:
                 proposals = clip_boxes_opr(proposals, im_info[bid, :])
             probs = rpn_cls_prob_list[l][bid] \
-                    .permute(1,2,0).reshape(-1, 2)
-            probs = torch.softmax(probs, dim=-1)[:, 1]
+                    .transpose((1,2,0)).reshape((-1, 2))
+            probs = F.softmax(probs, axis=-1)[:, 1]
             # gather the proposals and probs
             batch_proposals_list.append(proposals)
             batch_probs_list.append(probs)
-        batch_proposals = torch.cat(batch_proposals_list, dim=0)
-        batch_probs = torch.cat(batch_probs_list, dim=0)
+        batch_proposals = cat(batch_proposals_list, axis=0)
+        batch_probs = cat(batch_probs_list, axis=0)
         # filter the zero boxes.
         batch_keep_mask = filter_boxes_opr(
                 batch_proposals, box_min_size * im_info[bid, 2])
-        batch_proposals = batch_proposals[batch_keep_mask]
-        batch_probs = batch_probs[batch_keep_mask]
+        batch_keep_mask = torch.nonzero(batch_keep_mask)
+        batch_proposals = torch.gather(batch_proposals,batch_keep_mask)
+        batch_probs = torch.gather(batch_probs,batch_keep_mask)
         # prev_nms_top_n
         num_proposals = min(prev_nms_top_n, batch_probs.shape[0])
-        batch_probs, idx = batch_probs.sort(descending=True)
+        batch_probs = batch_probs.sort(descending=True)
+        idx = batch_probs.argsort(descending=True)
         batch_probs = batch_probs[:num_proposals]
         topk_idx = idx[:num_proposals].flatten()
-        batch_proposals = batch_proposals[topk_idx]
+        batch_proposals = torch.gather(batch_proposals,topk_idx)
         # For each image, run a total-level NMS, and choose topk results.
         keep = nms(batch_proposals, batch_probs, nms_threshold)
         keep = keep[:post_nms_top_n]
@@ -65,11 +67,11 @@ def find_top_rpn_proposals(is_train, rpn_bbox_offsets_list, rpn_cls_prob_list,
         #batch_probs = batch_probs[keep]
         # cons the rois
         batch_inds = torch.ones(batch_proposals.shape[0], 1).type_as(batch_proposals) * bid
-        batch_rois = torch.cat([batch_inds, batch_proposals], axis=1)
+        batch_rois = cat([batch_inds, batch_proposals], axis=1)
         return_rois.append(batch_rois)
 
     if batch_per_gpu == 1:
         return batch_rois
     else:
-        concated_rois = torch.cat(return_rois, axis=0)
+        concated_rois = cat(return_rois, axis=0)
         return concated_rois
