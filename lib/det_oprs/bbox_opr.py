@@ -83,16 +83,16 @@ def box_overlap_opr(box, gt):
     assert gt.ndim == 2
     area_box = (box[:, 2] - box[:, 0] + 1) * (box[:, 3] - box[:, 1] + 1)
     area_gt = (gt[:, 2] - gt[:, 0] + 1) * (gt[:, 3] - gt[:, 1] + 1)
-    width_height = torch.min(box[:, None, 2:], gt[:, 2:]) - torch.max(
-        box[:, None, :2], gt[:, :2]) + 1  # [N,M,2]
-    width_height.clamp_(min=0)  # [N,M,2]
-    inter = width_height.prod(dim=2)  # [N,M]
+    width_height = torch.minimum(box[:, 2:].unsqueeze(axis=-2), gt[:, 2:]) - torch.maximum(
+        box[:,  :2].unsqueeze(axis=-2), gt[:, :2]) + 1  # [N,M,2]
+    width_height = clamp(width_height,min=0,max=float('inf'))  # [N,M,2]
+    inter = width_height.prod(axis=2)  # [N,M]
     del width_height
     # handle empty boxes
     iou = torch.where(
         inter > 0,
-        inter / (area_box[:, None] + area_gt - inter),
-        torch.zeros((1), dtype=inter.dtype),
+        inter / (area_box.unsqueeze(axis=-1) + area_gt - inter),
+        torch.zeros(torch.to_tensor([1]), dtype=inter.dtype),
     )
     return iou
 

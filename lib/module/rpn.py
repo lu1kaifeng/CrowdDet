@@ -45,7 +45,7 @@ class RPN(nn.Layer):
         rpn_rois = find_top_rpn_proposals(
                 self.training, pred_bbox_offsets_list, pred_cls_score_list,
                 all_anchors_list, im_info)
-        rpn_rois = rpn_rois.type_as(features[0])
+        rpn_rois = rpn_rois.cast('float32')
         if self.training:
             rpn_labels, rpn_bbox_targets = fpn_anchor_target(
                     boxes, im_info, all_anchors_list)

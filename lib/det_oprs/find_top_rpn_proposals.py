@@ -1,11 +1,10 @@
 import paddle as torch
-from paddle.fluid.layers import concat as cat, matrix_nms as nms
+from paddle.fluid.layers import concat as cat, locality_aware_nms as nms
 from rcnn_emd_refine.config import config
 from det_oprs.bbox_opr import bbox_transform_inv_opr, clip_boxes_opr, \
     filter_boxes_opr
-from paddle import fluid
 import paddle.nn.functional as F
-
+from torchvision.ops import nms as nmss
 @torch.no_grad()
 def find_top_rpn_proposals(is_train, rpn_bbox_offsets_list, rpn_cls_prob_list,
         all_anchors_list, im_info):
@@ -60,13 +59,16 @@ def find_top_rpn_proposals(is_train, rpn_bbox_offsets_list, rpn_cls_prob_list,
         batch_probs = batch_probs[:num_proposals]
         topk_idx = idx[:num_proposals].flatten()
         batch_proposals = torch.gather(batch_proposals,topk_idx)
+        #nmss(tt.tensor(batch_proposals.numpy()), tt.tensor(batch_probs.numpy()), nms_threshold).shape
         # For each image, run a total-level NMS, and choose topk results.
-        keep = nms(batch_proposals, batch_probs, nms_threshold)
-        keep = keep[:post_nms_top_n]
-        batch_proposals = batch_proposals[keep]
+        keep = nms(bboxes=batch_proposals.unsqueeze(axis=0), scores=batch_probs.unsqueeze(axis=0).unsqueeze(axis=0), score_threshold=nms_threshold,
+                              nms_top_k=post_nms_top_n,
+                              keep_top_k=post_nms_top_n,normalized=False)
+        #keep = keep[:post_nms_top_n]
+        batch_proposals =keep[:,2:] #batch_proposals[keep]
         #batch_probs = batch_probs[keep]
         # cons the rois
-        batch_inds = torch.ones(batch_proposals.shape[0], 1).type_as(batch_proposals) * bid
+        batch_inds = torch.ones((batch_proposals.shape[0], 1)).cast('float32') * bid
         batch_rois = cat([batch_inds, batch_proposals], axis=1)
         return_rois.append(batch_rois)
 
