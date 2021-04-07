@@ -1,14 +1,13 @@
-import torch
+import paddle as torch
 from paddle import nn
 import paddle.nn.functional as F
 import numpy as np
-
 from rcnn_emd_refine.config import config
 from det_oprs.anchors_generator import AnchorGenerator
 from det_oprs.find_top_rpn_proposals import find_top_rpn_proposals
 from det_oprs.fpn_anchor_target import fpn_anchor_target, fpn_rpn_reshape
-from det_oprs.loss_opr import softmax_loss, smooth_l1_loss
-
+from det_oprs.loss_opr import softmax_loss as slo, smooth_l1_loss
+from paddle.fluid.layers import softmax_with_cross_entropy as softmax_loss
 class RPN(nn.Layer):
     def __init__(self, rpn_channel = 256):
         super().__init__()
@@ -54,16 +53,22 @@ class RPN(nn.Layer):
                 pred_cls_score_list, pred_bbox_offsets_list)
             # rpn loss
             valid_masks = rpn_labels >= 0
-            objectness_loss = softmax_loss(
-                pred_cls_score[valid_masks],
-                rpn_labels[valid_masks])
+            # objectness_loss = softmax_loss(
+            #     torch.gather(pred_cls_score,torch.nonzero(valid_masks)),
+            #     torch.gather(rpn_labels,torch.nonzero(valid_masks)))
+
+            objectness_loss = F.binary_cross_entropy(F.softmax(torch.gather(pred_cls_score, torch.nonzero(valid_masks))),
+            torch.gather(torch.eye(2),torch.gather(rpn_labels, torch.nonzero(valid_masks))))
 
             pos_masks = rpn_labels > 0
-            localization_loss = smooth_l1_loss(
-                pred_bbox_offsets[pos_masks],
-                rpn_bbox_targets[pos_masks],
-                config.rpn_smooth_l1_beta)
-            normalizer = 1 / valid_masks.sum().item()
+            # localization_loss = smooth_l1_loss(
+            #     pred_bbox_offsets[pos_masks],
+            #     rpn_bbox_targets[pos_masks],
+            #     config.rpn_smooth_l1_beta)
+            localization_loss = \
+            F.smooth_l1_loss(torch.gather(pred_bbox_offsets, torch.nonzero(pos_masks)),
+                             torch.gather(rpn_bbox_targets, torch.nonzero(pos_masks)),delta=config.rcnn_smooth_l1_beta)
+            normalizer = 1 / valid_masks.cast('float32').sum()
             loss_rpn_cls = objectness_loss.sum() * normalizer
             loss_rpn_loc = localization_loss.sum() * normalizer
             loss_dict = {}

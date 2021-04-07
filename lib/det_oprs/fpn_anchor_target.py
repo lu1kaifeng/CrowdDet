@@ -3,7 +3,7 @@ import numpy as np
 
 from det_oprs.bbox_opr import box_overlap_opr, bbox_transform_opr
 from rcnn_emd_refine.config import config
-from paddle.fluid.layers import concat as cat, greater_than as gt
+from paddle.fluid.layers import concat as cat, greater_than as gt,elementwise_mul as mul,fill_constant
 
 
 def fpn_rpn_reshape(pred_cls_score_list, pred_bbox_offsets_list):
@@ -14,9 +14,9 @@ def fpn_rpn_reshape(pred_cls_score_list, pred_bbox_offsets_list):
         batch_pred_cls_score_list = []
         for i in range(len(pred_cls_score_list)):
             pred_cls_score_perlvl = pred_cls_score_list[i][bid] \
-                .permute(1, 2, 0).reshape(-1, 2)
+                .transpose((1, 2, 0)).reshape((-1, 2))
             pred_bbox_offsets_perlvl = pred_bbox_offsets_list[i][bid] \
-                .permute(1, 2, 0).reshape(-1, 4)
+                .transpose((1, 2, 0)).reshape((-1, 4))
             batch_pred_cls_score_list.append(pred_cls_score_perlvl)
             batch_pred_bbox_offsets_list.append(pred_bbox_offsets_perlvl)
         batch_pred_cls_score = cat(batch_pred_cls_score_list, axis=0)
@@ -51,15 +51,20 @@ def fpn_anchor_target_opr_core_impl(
     fg_mask = (max_overlaps >= config.rpn_positive_overlap)
     if allow_low_quality_matches:
         gt_id = torch.arange(valid_gt_boxes.shape[0]).cast('float32')
-        argmax_overlaps[gt_argmax_overlaps] = gt_id
-        max_overlaps[gt_argmax_overlaps] = 1
+        #argmax_overlaps[gt_argmax_overlaps] = gt_id
+        for i,j in zip(gt_argmax_overlaps,range(gt_argmax_overlaps.shape[0])):
+            argmax_overlaps[i]  = gt_id[j]
+            max_overlaps[i] = 1
+        #max_overlaps[gt_argmax_overlaps] = 1
         fg_mask = (max_overlaps >= config.rpn_positive_overlap)
     # set positive ones
     fg_mask_ind = torch.nonzero(fg_mask, as_tuple=False).flatten()
-    labels[fg_mask_ind] = 1
+    #labels[fg_mask_ind] = 1
+    for i in fg_mask_ind:
+        labels[i] = 1
     # bbox targets
     bbox_targets = bbox_transform_opr(
-        anchors, valid_gt_boxes[argmax_overlaps, :4])
+        anchors, torch.gather(valid_gt_boxes,argmax_overlaps)[:, :4])
     if config.rpn_bbox_normalize_targets:
         std_opr = torch.to_tensor(config.bbox_normalize_stds[None, :]).type_as(bbox_targets)
         mean_opr = torch.to_tensor(config.bbox_normalize_means[None, :]).type_as(bbox_targets)
@@ -87,9 +92,12 @@ def fpn_anchor_target(boxes, im_info, all_anchors_list):
         # sample labels
         pos_idx, neg_idx = subsample_labels(concated_batch_labels,
                                             config.num_sample_anchors, config.positive_anchor_ratio)
-        concated_batch_labels.fill_(-1)
-        concated_batch_labels[pos_idx] = 1
-        concated_batch_labels[neg_idx] = 0
+        #concated_batch_labels.fill_(-1)
+        concated_batch_labels = fill_constant(concated_batch_labels.shape,'int32',-1)
+        for p in pos_idx:
+            concated_batch_labels[p] = 1
+        for n in neg_idx:
+            concated_batch_labels[n] = 0
 
         final_labels_list.append(concated_batch_labels)
         final_bbox_targets_list.append(concated_batch_bbox_targets)
@@ -111,7 +119,7 @@ def my_gt_argmax(overlaps):
 
 
 def subsample_labels(labels, num_samples, positive_fraction):
-    positive = torch.nonzero((labels != config.ignore_label) & (labels != 0), as_tuple=False).squeeze(1)
+    positive = torch.nonzero(mul((labels != config.ignore_label).cast('int'),(labels != 0).cast('int')).cast('bool'), as_tuple=False).squeeze(1)
     negative = torch.nonzero(labels == 0, as_tuple=False).squeeze(1)
 
     num_pos = int(num_samples * positive_fraction)
@@ -120,9 +128,13 @@ def subsample_labels(labels, num_samples, positive_fraction):
     num_neg = min(negative.numel(), num_neg)
 
     # randomly select positive and negative examples
+    if type(num_pos) == torch.Tensor:
+        num_pos = num_pos.numpy().item()
+    if type(num_neg) == torch.Tensor:
+        num_neg = num_neg.numpy().item()
     perm1 = torch.randperm(positive.numel())[:num_pos]
     perm2 = torch.randperm(negative.numel())[:num_neg]
 
-    pos_idx = positive[perm1]
-    neg_idx = negative[perm2]
+    pos_idx = torch.gather(positive,perm1)
+    neg_idx = torch.gather(negative,perm2)
     return pos_idx, neg_idx

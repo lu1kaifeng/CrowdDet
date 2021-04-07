@@ -74,8 +74,8 @@ def bbox_transform_opr(bbox, gt):
     target_dy = (gt_ctr_y - bbox_ctr_y) / bbox_height
     target_dw = torch.log(gt_width / bbox_width)
     target_dh = torch.log(gt_height / bbox_height)
-    target = cat((target_dx.reshape(-1, 1), target_dy.reshape(-1, 1),
-                        target_dw.reshape(-1, 1), target_dh.reshape(-1, 1)), axis=1)
+    target = cat((target_dx.reshape((-1, 1)), target_dy.reshape((-1, 1)),
+                        target_dw.reshape((-1, 1)), target_dh.reshape((-1, 1))), axis=1)
     return target
 
 def box_overlap_opr(box, gt):
